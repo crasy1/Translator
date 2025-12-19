@@ -1,0 +1,163 @@
+[gd_scene load_steps=2 format=3 uid="uid://jycceor6axvi"]
+
+[ext_resource type="Script" uid="uid://bvew16d6jp84h" path="res://src/Main.cs" id="1_4gxt3"]
+
+[node name="Main" type="CanvasLayer"]
+script = ExtResource("1_4gxt3")
+
+[node name="HBoxContainer" type="HBoxContainer" parent="."]
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="VBoxContainer" type="VBoxContainer" parent="HBoxContainer"]
+layout_mode = 2
+
+[node name="Setting" type="VBoxContainer" parent="HBoxContainer/VBoxContainer"]
+custom_minimum_size = Vector2(450, 0)
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer/VBoxContainer/Setting"]
+layout_mode = 2
+text = "---翻译设置---"
+horizontal_alignment = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="HBoxContainer/VBoxContainer/Setting"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer/VBoxContainer/Setting/HBoxContainer"]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+text = "服务商"
+
+[node name="Brand" type="OptionButton" parent="HBoxContainer/VBoxContainer/Setting/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+selected = 0
+item_count = 1
+popup/item_0/text = "ollama"
+popup/item_0/id = 0
+
+[node name="ListModelBtn" type="Button" parent="HBoxContainer/VBoxContainer/Setting/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "列出模型"
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="HBoxContainer/VBoxContainer/Setting"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer/VBoxContainer/Setting/HBoxContainer2"]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+text = "模型"
+
+[node name="Model" type="OptionButton" parent="HBoxContainer/VBoxContainer/Setting/HBoxContainer2"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+item_count = 1
+popup/item_0/text = "huihui_ai/hunyuan-mt-abliterated:7b"
+popup/item_0/id = 0
+
+[node name="HBoxContainer3" type="HBoxContainer" parent="HBoxContainer/VBoxContainer/Setting"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer/VBoxContainer/Setting/HBoxContainer3"]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+text = "API端点"
+
+[node name="VBoxContainer" type="VBoxContainer" parent="HBoxContainer/VBoxContainer/Setting/HBoxContainer3"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Host" type="LineEdit" parent="HBoxContainer/VBoxContainer/Setting/HBoxContainer3/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "http://localhost:11434"
+
+[node name="ApiChat" type="LineEdit" parent="HBoxContainer/VBoxContainer/Setting/HBoxContainer3/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "/v1/chat/completions"
+
+[node name="HBoxContainer4" type="HBoxContainer" parent="HBoxContainer/VBoxContainer/Setting"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer/VBoxContainer/Setting/HBoxContainer4"]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+text = "服务商"
+
+[node name="SecretKey" type="LineEdit" parent="HBoxContainer/VBoxContainer/Setting/HBoxContainer4"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "密钥"
+
+[node name="HBoxContainer" type="HBoxContainer" parent="HBoxContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Source" type="VBoxContainer" parent="HBoxContainer/VBoxContainer/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer/VBoxContainer/HBoxContainer/Source"]
+layout_mode = 2
+text = "---源语言---"
+horizontal_alignment = 1
+
+[node name="Target" type="VBoxContainer" parent="HBoxContainer/VBoxContainer/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer/VBoxContainer/HBoxContainer/Target"]
+layout_mode = 2
+text = "---目标语言---"
+horizontal_alignment = 1
+
+[node name="Label" type="Label" parent="HBoxContainer/VBoxContainer"]
+layout_mode = 2
+text = "---源文件---"
+horizontal_alignment = 1
+
+[node name="SourceFile" type="LineEdit" parent="HBoxContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "拖动pot文件至此以加载源文件"
+
+[node name="VBoxContainer2" type="VBoxContainer" parent="HBoxContainer"]
+custom_minimum_size = Vector2(400, 0)
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer/VBoxContainer2"]
+layout_mode = 2
+text = "---提示词---"
+horizontal_alignment = 1
+
+[node name="ScrollContainer" type="ScrollContainer" parent="HBoxContainer/VBoxContainer2"]
+custom_minimum_size = Vector2(0, 500)
+layout_mode = 2
+
+[node name="Prompt" type="TextEdit" parent="HBoxContainer/VBoxContainer2/ScrollContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+text = "你是一个专业的游戏本地化翻译
+        
+## 目的
+你需要帮我翻译发给你的文本
+翻译源语言为{0},目标语言为{1}
+保持原文本的结构不变
+只需要翻译每个 msgid 字段的值"
+wrap_mode = 1
+
+[node name="Translate" type="Button" parent="HBoxContainer/VBoxContainer2"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "翻译"
