@@ -124,9 +124,11 @@ public static class Ollama
     /// <returns></returns>
     public static async Task<string> Chat(ChatParamDto chatParamDto)
     {
+        chatParamDto.Stream = false;
         Log.Info(JsonUtil.ToJsonString(chatParamDto));
         var res = await HttpUtil.PostAsString($"{Host}{ApiChat}", chatParamDto);
-        return JsonUtil.ToObj<ChatResultDto>(res).Message.Content;
+        return JsonUtil.ToObj<OpenAiChatResultDto>(res).Choices[0].Message.Content;
+        // return JsonUtil.ToObj<ChatResultDto>(res).Message.Content;
     }
 
     /// <summary>
@@ -136,6 +138,7 @@ public static class Ollama
     /// <returns></returns>
     public static async Task StreamChat(ChatParamDto chatParamDto, Action<string> action)
     {
+        chatParamDto.Stream = true;
         Log.Info(JsonUtil.ToJsonString(chatParamDto));
         await HttpUtil.StreamPost($"{Host}{ApiChat}", chatParamDto, action);
     }
