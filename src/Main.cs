@@ -5,6 +5,8 @@ using Godot;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using OllamaSharp;
+using OllamaSharp.Models.Chat;
 using Translator.api;
 using Translator.data;
 using Translator.dto;
@@ -16,6 +18,10 @@ public partial class Main : CanvasLayer
     private List<string> TargetLangs = [];
     private string ModelName { set; get; }
     private List<Dictionary<string, string>> CsvCache { set; get; }
+
+    private OllamaApiClient OllamaApiClient { set; get; }
+
+    private const string CsvKeys = "keys";
 
     private const string TemplatePrompt = @"您是一位专业的翻译人员。请准确地翻译给定的文本，同时保留原始的含义和语气。
 翻译规则：
@@ -120,8 +126,8 @@ public partial class Main : CanvasLayer
             }
 
             // TranslationServer.Clear();
-            var langKeys = new HashSet<string>(CsvCache[0].Keys.Where(k => !"keys".Equals(k)));
-            var translateKeys = CsvCache.Select(dictionary => dictionary["keys"]).ToList();
+            var langKeys = new HashSet<string>(CsvCache[0].Keys.Where(k => !CsvKeys.Equals(k)));
+            var translateKeys = CsvCache.Select(dictionary => dictionary[CsvKeys]).ToList();
 
             Log.Info($"翻译语言：{string.Join(",", langKeys)}");
             Log.Info($"翻译字段：{string.Join(",", translateKeys)}");
@@ -135,10 +141,7 @@ public partial class Main : CanvasLayer
                 var btn = new Button();
                 btn.Text = langKey;
                 header.AddChild(btn);
-                btn.Pressed += () =>
-                {
-                    TranslationServer.SetLocale(langKey);
-                };
+                btn.Pressed += () => { TranslationServer.SetLocale(langKey); };
             }
 
             for (var i = 0; i < translateKeys.Count; i++)
@@ -146,10 +149,9 @@ public partial class Main : CanvasLayer
                 var label = new Label();
                 label.Text = translateKeys[i];
                 PreviewContainer.AddChild(label);
-                label.AddToGroup("tr");
                 foreach (var (lang, v) in CsvCache[i])
                 {
-                    if (!lang.Equals("keys"))
+                    if (!lang.Equals(CsvKeys))
                     {
                         translateMap[lang].Add(translateKeys[i], v);
                     }
@@ -166,6 +168,9 @@ public partial class Main : CanvasLayer
         };
         Translate.Pressed += async () =>
         {
+            Translate.Disabled = true;
+            TranslateProgress.Value = 0;
+            TranslateProgress.MaxValue = TargetLangs.Count;
             var sourceFilePath = SourceFile.Text;
             if (string.IsNullOrWhiteSpace(sourceFilePath))
             {
@@ -191,16 +196,9 @@ public partial class Main : CanvasLayer
                 return;
             }
 
-            if (!Ollama.IsRunning() | string.IsNullOrWhiteSpace(ModelName))
+            if (!await OllamaApiClient.IsRunningAsync() | string.IsNullOrWhiteSpace(ModelName))
             {
                 Log.Error("ollama未启动或者未选择模型");
-                return;
-            }
-
-            var runningModelList = await Ollama.RunningModelList();
-            if (!runningModelList.Any(m => m.Name == ModelName))
-            {
-                Log.Error($"选择的模型{ModelName}未启动");
                 return;
             }
 
@@ -232,8 +230,13 @@ public partial class Main : CanvasLayer
                     {
                         CsvCache[i][targetLang] = targetValues[i];
                     }
+
+                    TranslateProgress.Value += 1;
+                    Log.Info($"progress: {TranslateProgress.Value}/{TranslateProgress.MaxValue}");
                 }
 
+                Preview.Disabled = false;
+                Translate.Disabled = false;
                 return;
             }
 
@@ -243,13 +246,9 @@ public partial class Main : CanvasLayer
                 var messageList = translation.GetMessageList();
                 var translatedMessageList = translation.GetTranslatedMessageList();
                 var locale = translation.GetLocale();
+                Preview.Disabled = false;
+                Translate.Disabled = false;
                 return;
-            }
-
-            var content = FileUtil.GetFileText(sourceFilePath);
-            foreach (var targetLang in TargetLangs)
-            {
-                TranslateChat(SourceLang, targetLang, content);
             }
         };
     }
@@ -258,25 +257,21 @@ public partial class Main : CanvasLayer
     {
         var prompt = string.Format(TemplatePrompt, LocaleData.Language[sourceLang],
             LocaleData.Language[targetLang]);
-        var chatParamDto = new ChatParamDto()
+        var result = "";
+        var chatRequest = new ChatRequest()
         {
             Model = ModelName,
             Messages =
             [
-                MessageDto.System(prompt),
-                MessageDto.User(content)
+                new Message(ChatRole.System, prompt),
+                new Message(ChatRole.User, content)
             ]
         };
-        var result = "";
-        // await Ollama.StreamChat(chatParamDto, msg =>
-        // {
-        //     msg = msg.Replace("data:", "");
-        //     if (!msg.Contains("[DONE]"))
-        //     {
-        //         result += JObject.Parse(msg)["choices"][0]["delta"]["content"];
-        //     }
-        // });
-        result = await Ollama.Chat(chatParamDto);
+        await foreach (var chatResponseStream in OllamaApiClient.ChatAsync(chatRequest))
+        {
+            result += chatResponseStream.Message.Content;
+        }
+
         Log.Info(result);
         return result;
     }
@@ -286,37 +281,54 @@ public partial class Main : CanvasLayer
     /// </summary>
     private async Task InitOllama()
     {
-        Ollama.Start();
-        if (!Ollama.IsRunning())
+        OllamaApiClient = new OllamaApiClient(string.IsNullOrWhiteSpace(Host.Text) ? Host.PlaceholderText : Host.Text);
+        try
+        {
+            if (!await OllamaApiClient.IsRunningAsync())
+            {
+                throw new Exception("ollama未安装或者未启动成功");
+            }
+        }
+        catch (Exception e)
+        {
+            Ollama.Start();
+        }
+
+        try
+        {
+            if (!await OllamaApiClient.IsRunningAsync())
+            {
+                throw new Exception("ollama未安装或者未启动成功");
+            }
+        }
+        catch (Exception e)
         {
             Log.Error("ollama未安装或者未启动成功");
             GetTree().Quit();
         }
 
-        Log.Info(await Ollama.OllamaCmd("-v"));
+        Log.Info(await OllamaApiClient.GetVersionAsync());
 
         Host.FocusExited += () =>
         {
-            Ollama.Host = string.IsNullOrWhiteSpace(Host.Text) ? Host.PlaceholderText : Host.Text;
+            OllamaApiClient =
+                new OllamaApiClient(string.IsNullOrWhiteSpace(Host.Text) ? Host.PlaceholderText : Host.Text);
         };
-        ApiChat.FocusExited += () =>
-        {
-            Ollama.ApiChat = string.IsNullOrWhiteSpace(ApiChat.Text) ? ApiChat.PlaceholderText : ApiChat.Text;
-        };
+        ApiChat.FocusExited += () => { };
         ListModelBtn.Pressed += async () =>
         {
-            var localModelList = await Ollama.LocalModelList();
-            var runningModelList = await Ollama.RunningModelList();
+            var localModelList = await OllamaApiClient.ListLocalModelsAsync();
+            var runningModelList = await OllamaApiClient.ListRunningModelsAsync();
             foreach (var modelDto in localModelList)
             {
-                Log.Info($"{modelDto.Id} ,running: {runningModelList.Any(m => m.Name.Equals(modelDto.Id))}");
+                Log.Info($"{modelDto.Name} ,running: {runningModelList.Any(m => m.Name.Equals(modelDto.Name))}");
             }
         };
         Model.ItemSelected += async (index) =>
         {
             Model.SelfModulate = Colors.Red;
             ModelName = Model.GetItemText((int)index);
-            var runningModelList = await Ollama.RunningModelList();
+            var runningModelList = await OllamaApiClient.ListRunningModelsAsync();
             if (runningModelList.Any(m => m.Name == ModelName))
             {
                 Model.SelfModulate = Colors.Green;
@@ -325,35 +337,35 @@ public partial class Main : CanvasLayer
 
             foreach (var modelDto in runningModelList)
             {
-                Ollama.UnloadModel(modelDto.Name);
+                OllamaApiClient.ChatAsync(new ChatRequest() { Model = modelDto.Name, KeepAlive = "0" });
             }
 
-            if (await Ollama.LoadModel(ModelName))
-            {
-                Log.Info($"加载模型 {ModelName}");
-                Model.SelfModulate = Colors.Green;
-            }
+            OllamaApiClient.SelectedModel = ModelName;
+            Log.Info($"加载模型 {ModelName}");
+            Model.SelfModulate = Colors.Green;
         };
 
         Model.Clear();
-        var runningModelListTask = Ollama.RunningModelList();
-        var localModelList = await Ollama.LocalModelList();
+        var runningModelListTask = OllamaApiClient.ListRunningModelsAsync();
+        var localModelList = await OllamaApiClient.ListLocalModelsAsync();
         foreach (var modelDto in localModelList)
         {
-            Log.Info(modelDto.Id);
-            Model.AddItem(modelDto.Id);
+            Log.Info(modelDto.Name);
+            Model.AddItem(modelDto.Name);
         }
 
         var runningModelList = await runningModelListTask;
-        if (runningModelList.Count > 0)
+        if (runningModelList.Count() > 0)
         {
-            var index = localModelList.FindIndex(i => i.Id.Equals(runningModelList[0].Name));
-            Log.Info($"默认运行{runningModelList[0].Name} - {index}");
-            Model.SelectAndEmitSignal(index);
+            var runningModelName = runningModelList.First().Name;
+            var valueTuples = localModelList.Index().Where((im, i) => im.Item.Name.Equals(runningModelName))
+                .GetEnumerator();
+            Log.Info($"默认运行{runningModelName} - {valueTuples.Current.Index}");
+            Model.SelectAndEmitSignal(valueTuples.Current.Index);
         }
         else
         {
-            if (localModelList.Count > 0)
+            if (localModelList.Count() > 0)
             {
                 Model.SelectAndEmitSignal(0);
             }

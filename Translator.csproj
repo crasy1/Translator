@@ -7,5 +7,6 @@
   <ItemGroup>
     <PackageReference Include="GodotTools" Version="0.0.5" />
     <PackageReference Include="GodotTools.SourceGenerators" Version="0.0.5" />
+    <PackageReference Include="OllamaSharp" Version="5.4.12" />
   </ItemGroup>
 </Project>
