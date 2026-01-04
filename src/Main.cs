@@ -3,14 +3,12 @@ using System.Collections.Generic;
 using System.IO;
 using Godot;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using NJsonSchema;
 using OllamaSharp;
 using OllamaSharp.Models.Chat;
 using Translator.api;
 using Translator.data;
-using Translator.dto;
 using FileAccess = Godot.FileAccess;
 
 [SceneTree]
@@ -28,7 +26,7 @@ public partial class Main : CanvasLayer
 
     private const string CsvKeys = "keys";
 
-    private const string TemplatePrompt = @"您是一位专业的翻译人员。请准确地翻译给定的文本，同时保留原始的含义和语气。
+    private const string SystemPrompt = @"您是一位专业的翻译人员。请准确地翻译给定的文本，同时保留原始的含义和语气。
 翻译规则：
 1.将{0}内容翻译成{1}。
 2.仅返回翻译结果，不添加任何解释或额外的评论。
@@ -69,7 +67,7 @@ public partial class Main : CanvasLayer
     private void BuildPrompt()
     {
         var list = TargetLangs.Select(l => LocaleData.Language[l]).ToList();
-        var prompt = string.Format(TemplatePrompt, LocaleData.Language[SourceLang], string.Join(",", list));
+        var prompt = string.Format(SystemPrompt, LocaleData.Language[SourceLang], string.Join(",", list));
         Prompt.Text = prompt;
     }
 
@@ -227,12 +225,18 @@ public partial class Main : CanvasLayer
             if (sourceFilePath.EndsWith("csv"))
             {
                 CsvCache = FileUtil.ReadCsv(sourceFilePath);
-                var sourceTranslation = new StringBuilder();
+                var sourceDict = new Dictionary<string, string>();
                 foreach (var row in CsvCache)
                 {
+                    if (!row.TryGetValue(CsvKeys, out var header))
+                    {
+                        Log.Error($"没有找到 keys 字段");
+                        return;
+                    }
+
                     if (row.TryGetValue(SourceLang, out var sourceText))
                     {
-                        sourceTranslation.AppendLine(sourceText);
+                        sourceDict[header] = sourceText;
                     }
                     else
                     {
@@ -243,7 +247,7 @@ public partial class Main : CanvasLayer
 
                 foreach (var targetLang in TargetLangs)
                 {
-                    var translateResult = await TranslateChat(SourceLang, targetLang, sourceTranslation.ToString());
+                    var translateResult = await TranslateChat(SourceLang, targetLang, sourceDict);
                     // 处理换行
                     var targetValues =
                         translateResult.Split(["\r\n", "\n", "\r"], StringSplitOptions.RemoveEmptyEntries);
@@ -277,28 +281,26 @@ public partial class Main : CanvasLayer
         };
     }
 
-    public async Task<string> TranslateChat(string sourceLang, string targetLang, string content)
+    public async Task<string> TranslateChat(string sourceLang, string targetLang, Dictionary<string, string> content)
     {
-        var prompt = string.Format(TemplatePrompt, LocaleData.Language[sourceLang],
+        var prompt = string.Format(SystemPrompt, LocaleData.Language[sourceLang],
             LocaleData.Language[targetLang]);
         var result = "";
-        // TODO json
-        var dict = new Dictionary<string, object>
-        {
-            {"name", "John"},
-            {"age", 30},
-            {"isActive", true}
-        };
-        var jsonSchema = JsonSchema.FromSampleJson(JsonUtil.ToJsonString(dict));
-
+        Dictionary<string, object> dic = new();
+        dic ["age"] = 1;
+        dic ["available"] = false;
+        var jsonContent = JsonUtil.ToJsonString(dic);
+        var fromSampleJson = JsonSchema.FromSampleJson(jsonContent);
+        Log.Info(fromSampleJson.ToJson());
         var chatRequest = new ChatRequest()
         {
             Model = ModelName,
             Messages =
             [
-                new Message(ChatRole.System, prompt),
-                new Message(ChatRole.User, content)
+                // new Message(ChatRole.System, prompt),
+                new Message(ChatRole.User,"Ollama is 22 years old and busy saving the world. Return a JSON object with the age and availability.")
             ],
+            Format = fromSampleJson.ToJson()
         };
         await foreach (var chatResponseStream in OllamaApiClient.ChatAsync(chatRequest))
         {
@@ -356,7 +358,7 @@ public partial class Main : CanvasLayer
             };
             OllamaApiClient = new OllamaApiClient(httpClient);
         };
-        
+
         ListModelBtn.Pressed += async () =>
         {
             var localModelList = await OllamaApiClient.ListLocalModelsAsync();
