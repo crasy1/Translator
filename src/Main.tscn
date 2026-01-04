@@ -77,12 +77,6 @@ layout_mode = 2
 size_flags_horizontal = 3
 placeholder_text = "http://localhost:11434"
 
-[node name="ApiChat" type="LineEdit" parent="HBoxContainer/VBoxContainer/Setting/HBoxContainer3/VBoxContainer"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-placeholder_text = "/v1/chat/completions"
-
 [node name="HBoxContainer4" type="HBoxContainer" parent="HBoxContainer/VBoxContainer/Setting"]
 layout_mode = 2
 
@@ -170,6 +164,20 @@ layout_mode = 2
 unique_name_in_owner = true
 layout_mode = 2
 text = "预览"
+
+[node name="Save" type="Button" parent="HBoxContainer/VBoxContainer2"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "保存"
+
+[node name="SavedPath" type="Label" parent="HBoxContainer/VBoxContainer2"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Open" type="Button" parent="HBoxContainer/VBoxContainer2"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "打开"
 
 [node name="ScrollContainer" type="ScrollContainer" parent="HBoxContainer"]
 custom_minimum_size = Vector2(400, 0)

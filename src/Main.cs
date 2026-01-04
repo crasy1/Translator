@@ -5,11 +5,13 @@ using Godot;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using NJsonSchema;
 using OllamaSharp;
 using OllamaSharp.Models.Chat;
 using Translator.api;
 using Translator.data;
 using Translator.dto;
+using FileAccess = Godot.FileAccess;
 
 [SceneTree]
 public partial class Main : CanvasLayer
@@ -20,6 +22,9 @@ public partial class Main : CanvasLayer
     private List<Dictionary<string, string>> CsvCache { set; get; }
 
     private OllamaApiClient OllamaApiClient { set; get; }
+
+    private string Extension { set; get; }
+    private string SavePath { set; get; }
 
     private const string CsvKeys = "keys";
 
@@ -47,11 +52,12 @@ public partial class Main : CanvasLayer
     private void OnFileDropped(string[] files)
     {
         var filePath = files[0];
-        List<string> extensions = [".pot", ".po", ".csv", ".translation"];
-        var extension = Path.GetExtension(filePath);
-        if (!extensions.Contains(extension))
+        List<string> extensions = ["pot", "po", "csv", "translation"];
+
+        Extension = FileAccess.GetExtension(filePath);
+        if (!extensions.Contains(Extension))
         {
-            Log.Error($"文件格式错误 {extension}");
+            Log.Error($"文件格式错误 {Extension}");
             SourceFile.Text = null;
         }
         else
@@ -73,6 +79,8 @@ public partial class Main : CanvasLayer
     /// </summary>
     private void InitLanguages()
     {
+        Preview.Disabled = true;
+        Save.Disabled = true;
         var buttonGroup = new ButtonGroup();
         foreach (var (code, lang) in LocaleData.Language)
         {
@@ -117,6 +125,20 @@ public partial class Main : CanvasLayer
             }
         }
 
+        Save.Pressed += () =>
+        {
+            SavePath = Path.Join(OS.GetUserDataDir(), "temp", $"{DateTime.Now.ToString("yyyyMMddHHmmss")}.{Extension}");
+            FileUtil.WriteCsv(SavePath, CsvCache);
+            Log.Info($"保存 {SavePath}");
+            SavedPath.Text = SavePath;
+        };
+        Open.Pressed += () =>
+        {
+            if (FileAccess.FileExists(SavePath))
+            {
+                OS.ShellOpen(FileAccess.GetParentDir(SavePath));
+            }
+        };
         Preview.Pressed += () =>
         {
             PreviewContainer.ClearAndFreeChildren();
@@ -125,7 +147,7 @@ public partial class Main : CanvasLayer
                 return;
             }
 
-            // TranslationServer.Clear();
+            TranslationServer.Clear();
             var langKeys = new HashSet<string>(CsvCache[0].Keys.Where(k => !CsvKeys.Equals(k)));
             var translateKeys = CsvCache.Select(dictionary => dictionary[CsvKeys]).ToList();
 
@@ -202,7 +224,7 @@ public partial class Main : CanvasLayer
                 return;
             }
 
-            if (sourceFilePath.EndsWith(".csv"))
+            if (sourceFilePath.EndsWith("csv"))
             {
                 CsvCache = FileUtil.ReadCsv(sourceFilePath);
                 var sourceTranslation = new StringBuilder();
@@ -236,17 +258,19 @@ public partial class Main : CanvasLayer
                 }
 
                 Preview.Disabled = false;
+                Save.Disabled = false;
                 Translate.Disabled = false;
                 return;
             }
 
-            if (sourceFilePath.EndsWith(".translation"))
+            if (sourceFilePath.EndsWith("translation"))
             {
                 var translation = ResourceLoader.Load<Translation>(sourceFilePath);
                 var messageList = translation.GetMessageList();
                 var translatedMessageList = translation.GetTranslatedMessageList();
                 var locale = translation.GetLocale();
                 Preview.Disabled = false;
+                Save.Disabled = false;
                 Translate.Disabled = false;
                 return;
             }
@@ -258,6 +282,15 @@ public partial class Main : CanvasLayer
         var prompt = string.Format(TemplatePrompt, LocaleData.Language[sourceLang],
             LocaleData.Language[targetLang]);
         var result = "";
+        // TODO json
+        var dict = new Dictionary<string, object>
+        {
+            {"name", "John"},
+            {"age", 30},
+            {"isActive", true}
+        };
+        var jsonSchema = JsonSchema.FromSampleJson(JsonUtil.ToJsonString(dict));
+
         var chatRequest = new ChatRequest()
         {
             Model = ModelName,
@@ -265,7 +298,7 @@ public partial class Main : CanvasLayer
             [
                 new Message(ChatRole.System, prompt),
                 new Message(ChatRole.User, content)
-            ]
+            ],
         };
         await foreach (var chatResponseStream in OllamaApiClient.ChatAsync(chatRequest))
         {
@@ -281,7 +314,12 @@ public partial class Main : CanvasLayer
     /// </summary>
     private async Task InitOllama()
     {
-        OllamaApiClient = new OllamaApiClient(string.IsNullOrWhiteSpace(Host.Text) ? Host.PlaceholderText : Host.Text);
+        var httpClient = new System.Net.Http.HttpClient()
+        {
+            BaseAddress = new(string.IsNullOrWhiteSpace(Host.Text) ? Host.PlaceholderText : Host.Text),
+            Timeout = TimeSpan.FromSeconds(60)
+        };
+        OllamaApiClient = new OllamaApiClient(httpClient);
         try
         {
             if (!await OllamaApiClient.IsRunningAsync())
@@ -311,10 +349,14 @@ public partial class Main : CanvasLayer
 
         Host.FocusExited += () =>
         {
-            OllamaApiClient =
-                new OllamaApiClient(string.IsNullOrWhiteSpace(Host.Text) ? Host.PlaceholderText : Host.Text);
+            var httpClient = new System.Net.Http.HttpClient()
+            {
+                BaseAddress = new(string.IsNullOrWhiteSpace(Host.Text) ? Host.PlaceholderText : Host.Text),
+                Timeout = TimeSpan.FromSeconds(60)
+            };
+            OllamaApiClient = new OllamaApiClient(httpClient);
         };
-        ApiChat.FocusExited += () => { };
+        
         ListModelBtn.Pressed += async () =>
         {
             var localModelList = await OllamaApiClient.ListLocalModelsAsync();
@@ -370,10 +412,5 @@ public partial class Main : CanvasLayer
                 Model.SelectAndEmitSignal(0);
             }
         }
-    }
-
-    // Called every frame. 'delta' is the elapsed time since the previous frame.
-    public override void _Process(double delta)
-    {
     }
 }
