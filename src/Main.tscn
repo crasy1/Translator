@@ -130,7 +130,7 @@ layout_mode = 2
 
 [node name="Label" type="Label" parent="HBoxContainer/VBoxContainer2"]
 layout_mode = 2
-text = "---提示词---"
+text = "---系统提示词---"
 horizontal_alignment = 1
 
 [node name="ScrollContainer" type="ScrollContainer" parent="HBoxContainer/VBoxContainer2"]
@@ -148,44 +148,91 @@ text = "您是一位专业的翻译人员。请准确地翻译给定的文本，
 2.仅返回翻译结果，不添加任何解释或额外的评论。
 3.保持代码格式、变量名称（snake_case、camelCase）以及特殊字符的原有形式。
 4.确保技术术语的准确性和原文的语气一致。
-5.换行需要保持一致,标点符号需要保持一致"
+5.输入格式为json,只需要翻译json object value中的值"
+placeholder_text = "您是一位专业的翻译人员。请准确地翻译给定的文本，同时保留原始的含义和语气。
+翻译规则：
+1.将{0}内容翻译成{1}。
+2.仅返回翻译结果，不添加任何解释或额外的评论。
+3.保持代码格式、变量名称（snake_case、camelCase）以及特殊字符的原有形式。
+4.确保技术术语的准确性和原文的语气一致。
+5.输入格式为json,只需要翻译json object value中的值"
 wrap_mode = 1
 
-[node name="Translate" type="Button" parent="HBoxContainer/VBoxContainer2"]
+[node name="HBoxContainer" type="HBoxContainer" parent="HBoxContainer/VBoxContainer2"]
+layout_mode = 2
+alignment = 1
+
+[node name="EditPromptBtn" type="Button" parent="HBoxContainer/VBoxContainer2/HBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
+text = "修改提示词"
+
+[node name="PreviewPromptBtn" type="Button" parent="HBoxContainer/VBoxContainer2/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "预览提示词"
+
+[node name="HBoxContainer3" type="HBoxContainer" parent="HBoxContainer/VBoxContainer2"]
+layout_mode = 2
+alignment = 1
+
+[node name="TranslateBtn" type="Button" parent="HBoxContainer/VBoxContainer2/HBoxContainer3"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
 text = "翻译"
 
-[node name="TranslateProgress" type="ProgressBar" parent="HBoxContainer/VBoxContainer2"]
+[node name="TranslateProgress" type="ProgressBar" parent="HBoxContainer/VBoxContainer2/HBoxContainer3"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 
-[node name="Preview" type="Button" parent="HBoxContainer/VBoxContainer2"]
+[node name="PreviewBtn" type="Button" parent="HBoxContainer/VBoxContainer2"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "预览"
 
-[node name="Save" type="Button" parent="HBoxContainer/VBoxContainer2"]
+[node name="HBoxContainer2" type="HBoxContainer" parent="HBoxContainer/VBoxContainer2"]
+layout_mode = 2
+alignment = 1
+
+[node name="SaveBtn" type="Button" parent="HBoxContainer/VBoxContainer2/HBoxContainer2"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 text = "保存"
 
-[node name="SavedPath" type="Label" parent="HBoxContainer/VBoxContainer2"]
+[node name="OpenBtn" type="Button" parent="HBoxContainer/VBoxContainer2/HBoxContainer2"]
 unique_name_in_owner = true
 layout_mode = 2
-
-[node name="Open" type="Button" parent="HBoxContainer/VBoxContainer2"]
-unique_name_in_owner = true
-layout_mode = 2
+size_flags_horizontal = 3
 text = "打开"
 
-[node name="ScrollContainer" type="ScrollContainer" parent="HBoxContainer"]
-custom_minimum_size = Vector2(400, 0)
+[node name="HScrollBar" type="ScrollContainer" parent="HBoxContainer/VBoxContainer2"]
+layout_mode = 2
+vertical_scroll_mode = 0
+
+[node name="SavedPath" type="Label" parent="HBoxContainer/VBoxContainer2/HScrollBar"]
+unique_name_in_owner = true
 layout_mode = 2
 
-[node name="HBoxContainer" type="HBoxContainer" parent="HBoxContainer/ScrollContainer"]
+[node name="VBoxContainer3" type="VBoxContainer" parent="HBoxContainer"]
 layout_mode = 2
 
-[node name="PreviewContainer" type="VBoxContainer" parent="HBoxContainer/ScrollContainer/HBoxContainer"]
+[node name="Label" type="Label" parent="HBoxContainer/VBoxContainer3"]
+layout_mode = 2
+text = "---翻译预览---"
+horizontal_alignment = 1
+
+[node name="ScrollContainer" type="ScrollContainer" parent="HBoxContainer/VBoxContainer3"]
+custom_minimum_size = Vector2(400, 600)
+layout_mode = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="HBoxContainer/VBoxContainer3/ScrollContainer"]
+layout_mode = 2
+
+[node name="PreviewContainer" type="VBoxContainer" parent="HBoxContainer/VBoxContainer3/ScrollContainer/HBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2

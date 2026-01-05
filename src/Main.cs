@@ -3,12 +3,14 @@ using System.Collections.Generic;
 using System.IO;
 using Godot;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using NJsonSchema;
 using OllamaSharp;
 using OllamaSharp.Models.Chat;
 using Translator.api;
 using Translator.data;
+using ChatRole = OllamaSharp.Models.Chat.ChatRole;
 using FileAccess = Godot.FileAccess;
 
 [SceneTree]
@@ -25,15 +27,10 @@ public partial class Main : CanvasLayer
     private string SavePath { set; get; }
 
     private const string CsvKeys = "keys";
+    private ButtonGroup SourceLangGroup = new();
+    private ButtonGroup PreviewLangGroup = new();
 
-    private const string SystemPrompt = @"您是一位专业的翻译人员。请准确地翻译给定的文本，同时保留原始的含义和语气。
-翻译规则：
-1.将{0}内容翻译成{1}。
-2.仅返回翻译结果，不添加任何解释或额外的评论。
-3.保持代码格式、变量名称（snake_case、camelCase）以及特殊字符的原有形式。
-4.确保技术术语的准确性和原文的语气一致。
-5.换行需要保持一致,标点符号需要保持一致
-";
+    private string SystemPrompt { set; get; }
 
 
     public override async void _Ready()
@@ -55,7 +52,7 @@ public partial class Main : CanvasLayer
         Extension = FileAccess.GetExtension(filePath);
         if (!extensions.Contains(Extension))
         {
-            Log.Error($"文件格式错误 {Extension}");
+            Log.Error($"[导入] 文件格式错误 {Extension}");
             SourceFile.Text = null;
         }
         else
@@ -77,21 +74,24 @@ public partial class Main : CanvasLayer
     /// </summary>
     private void InitLanguages()
     {
-        Preview.Disabled = true;
-        Save.Disabled = true;
-        var buttonGroup = new ButtonGroup();
+        PreviewBtn.Disabled = true;
+        SaveBtn.Disabled = true;
+        PreviewPromptBtn.Disabled = true;
+        Prompt.Editable = false;
+        SystemPrompt = Prompt.Text;
+
         foreach (var (code, lang) in LocaleData.Language)
         {
             var sBox = new CheckBox();
             sBox.Text = lang;
             Source.AddChild(sBox);
-            sBox.ButtonGroup = buttonGroup;
+            sBox.ButtonGroup = SourceLangGroup;
             sBox.Toggled += (toggled) =>
             {
                 if (toggled)
                 {
                     SourceLang = code;
-                    Log.Info("源语言：", SourceLang);
+                    Log.Info("[翻译设置] 源语言：", SourceLang);
                     BuildPrompt();
                 }
             };
@@ -114,7 +114,7 @@ public partial class Main : CanvasLayer
                     TargetLangs.Remove(code);
                 }
 
-                Log.Info("目标语言：", string.Join(",", TargetLangs));
+                Log.Info("[翻译设置] 目标语言：", string.Join(",", TargetLangs));
                 BuildPrompt();
             };
             if (code == "zh_cn")
@@ -123,21 +123,34 @@ public partial class Main : CanvasLayer
             }
         }
 
-        Save.Pressed += () =>
+        EditPromptBtn.Pressed += () =>
+        {
+            Prompt.Editable = true;
+            Prompt.Text = SystemPrompt;
+            PreviewPromptBtn.Disabled = false;
+        };
+        PreviewPromptBtn.Pressed += () =>
+        {
+            Prompt.Editable = false;
+            SystemPrompt = Prompt.Text;
+            BuildPrompt();
+            PreviewPromptBtn.Disabled = true;
+        };
+        SaveBtn.Pressed += () =>
         {
             SavePath = Path.Join(OS.GetUserDataDir(), "temp", $"{DateTime.Now.ToString("yyyyMMddHHmmss")}.{Extension}");
             FileUtil.WriteCsv(SavePath, CsvCache);
             Log.Info($"保存 {SavePath}");
             SavedPath.Text = SavePath;
         };
-        Open.Pressed += () =>
+        OpenBtn.Pressed += () =>
         {
             if (FileAccess.FileExists(SavePath))
             {
                 OS.ShellOpen(FileAccess.GetParentDir(SavePath));
             }
         };
-        Preview.Pressed += () =>
+        PreviewBtn.Pressed += () =>
         {
             PreviewContainer.ClearAndFreeChildren();
             if (CsvCache is null)
@@ -149,8 +162,8 @@ public partial class Main : CanvasLayer
             var langKeys = new HashSet<string>(CsvCache[0].Keys.Where(k => !CsvKeys.Equals(k)));
             var translateKeys = CsvCache.Select(dictionary => dictionary[CsvKeys]).ToList();
 
-            Log.Info($"翻译语言：{string.Join(",", langKeys)}");
-            Log.Info($"翻译字段：{string.Join(",", translateKeys)}");
+            Log.Info($"[翻译] 语言：{string.Join(",", langKeys)}");
+            Log.Info($"[翻译] 字段：{string.Join(",", translateKeys)}");
             Dictionary<string, Godot.Collections.Dictionary> translateMap = new();
 
             var header = new HBoxContainer();
@@ -158,10 +171,17 @@ public partial class Main : CanvasLayer
             foreach (var langKey in langKeys)
             {
                 translateMap.TryAdd(langKey, new());
-                var btn = new Button();
+                var btn = new CheckBox();
+                btn.ButtonGroup = PreviewLangGroup;
                 btn.Text = langKey;
                 header.AddChild(btn);
-                btn.Pressed += () => { TranslationServer.SetLocale(langKey); };
+                btn.Toggled += (toggled) =>
+                {
+                    if (toggled)
+                    {
+                        TranslationServer.SetLocale(langKey);
+                    }
+                };
             }
 
             for (var i = 0; i < translateKeys.Count; i++)
@@ -186,42 +206,42 @@ public partial class Main : CanvasLayer
                 TranslationServer.AddTranslation(translation);
             }
         };
-        Translate.Pressed += async () =>
+        TranslateBtn.Pressed += async () =>
         {
-            Translate.Disabled = true;
-            TranslateProgress.Value = 0;
-            TranslateProgress.MaxValue = TargetLangs.Count;
             var sourceFilePath = SourceFile.Text;
             if (string.IsNullOrWhiteSpace(sourceFilePath))
             {
-                Log.Error("没有设置源文件");
+                Log.Error("[翻译] 没有设置源文件");
                 return;
             }
 
             if (!File.Exists(sourceFilePath))
             {
-                Log.Error("源文件不存在");
+                Log.Error("[翻译] 源文件不存在");
                 return;
             }
 
             if (string.IsNullOrWhiteSpace(SourceLang))
             {
-                Log.Error("没有设置源语言");
+                Log.Error("[翻译] 没有设置源语言");
                 return;
             }
 
             if (TargetLangs.Count <= 0)
             {
-                Log.Error("没有设置目标语言");
+                Log.Error("[翻译] 没有设置目标语言");
                 return;
             }
 
             if (!await OllamaApiClient.IsRunningAsync() | string.IsNullOrWhiteSpace(ModelName))
             {
-                Log.Error("ollama未启动或者未选择模型");
+                Log.Error("[ollama] 未启动或者未选择模型");
                 return;
             }
 
+            TranslateBtn.Disabled = true;
+            TranslateProgress.Value = 0;
+            TranslateProgress.MaxValue = TargetLangs.Count;
             if (sourceFilePath.EndsWith("csv"))
             {
                 CsvCache = FileUtil.ReadCsv(sourceFilePath);
@@ -230,7 +250,7 @@ public partial class Main : CanvasLayer
                 {
                     if (!row.TryGetValue(CsvKeys, out var header))
                     {
-                        Log.Error($"没有找到 keys 字段");
+                        Log.Error($"[翻译] 没有找到 keys 字段");
                         return;
                     }
 
@@ -240,30 +260,29 @@ public partial class Main : CanvasLayer
                     }
                     else
                     {
-                        Log.Error($"没有找到 {LocaleData.Language[SourceLang]} 相关翻译");
+                        Log.Error($"[翻译] 没有找到 {LocaleData.Language[SourceLang]} 相关翻译");
                         return;
                     }
                 }
 
                 foreach (var targetLang in TargetLangs)
                 {
-                    var translateResult = await TranslateChat(SourceLang, targetLang, sourceDict);
-                    // 处理换行
-                    var targetValues =
-                        translateResult.Split(["\r\n", "\n", "\r"], StringSplitOptions.RemoveEmptyEntries);
-                    Log.Info($"源 {SourceLang} key 数量：{CsvCache.Count}，翻译 {targetLang} 后key 数量： {targetValues.Length}");
-                    for (var i = 0; i < CsvCache.Count; i++)
+                    var resultDict = await TranslateChat(SourceLang, targetLang, sourceDict);
+                    var idx = 0;
+                    foreach (var (k, v) in resultDict)
                     {
-                        CsvCache[i][targetLang] = targetValues[i];
+                        CsvCache[idx][targetLang] = v;
+                        idx++;
                     }
 
                     TranslateProgress.Value += 1;
-                    Log.Info($"progress: {TranslateProgress.Value}/{TranslateProgress.MaxValue}");
+                    Log.Info(
+                        $"[翻译进度] ({TranslateProgress.Value}/{TranslateProgress.MaxValue}): 源语言 {SourceLang} key 数量：{CsvCache.Count}，目标语言 {targetLang} key 数量： {resultDict.Count}");
                 }
 
-                Preview.Disabled = false;
-                Save.Disabled = false;
-                Translate.Disabled = false;
+                PreviewBtn.Disabled = false;
+                SaveBtn.Disabled = false;
+                TranslateBtn.Disabled = false;
                 return;
             }
 
@@ -273,42 +292,46 @@ public partial class Main : CanvasLayer
                 var messageList = translation.GetMessageList();
                 var translatedMessageList = translation.GetTranslatedMessageList();
                 var locale = translation.GetLocale();
-                Preview.Disabled = false;
-                Save.Disabled = false;
-                Translate.Disabled = false;
+                PreviewBtn.Disabled = false;
+                SaveBtn.Disabled = false;
+                TranslateBtn.Disabled = false;
                 return;
             }
         };
     }
 
-    public async Task<string> TranslateChat(string sourceLang, string targetLang, Dictionary<string, string> content)
+    public async Task<Dictionary<string, string>> TranslateChat(string sourceLang, string targetLang,
+        Dictionary<string, string> sourceDict)
     {
         var prompt = string.Format(SystemPrompt, LocaleData.Language[sourceLang],
             LocaleData.Language[targetLang]);
         var result = "";
-        Dictionary<string, object> dic = new();
-        dic ["age"] = 1;
-        dic ["available"] = false;
-        var jsonContent = JsonUtil.ToJsonString(dic);
-        var fromSampleJson = JsonSchema.FromSampleJson(jsonContent);
-        Log.Info(fromSampleJson.ToJson());
+        var jsonContent = JsonUtil.ToJsonString(sourceDict);
         var chatRequest = new ChatRequest()
         {
             Model = ModelName,
             Messages =
             [
-                // new Message(ChatRole.System, prompt),
-                new Message(ChatRole.User,"Ollama is 22 years old and busy saving the world. Return a JSON object with the age and availability.")
+                new Message(ChatRole.System, prompt),
+                new Message(ChatRole.User, jsonContent)
             ],
-            Format = fromSampleJson.ToJson()
+            Format = JsonElement.Parse(JsonSchema.FromSampleJson(jsonContent).ToJson())
         };
-        await foreach (var chatResponseStream in OllamaApiClient.ChatAsync(chatRequest))
+        try
         {
-            result += chatResponseStream.Message.Content;
-        }
+            await foreach (var chatResponseStream in OllamaApiClient.ChatAsync(chatRequest))
+            {
+                result += chatResponseStream.Message.Content;
+            }
 
-        Log.Info(result);
-        return result;
+            return JsonUtil.ToDictionary<string, string>(result);
+        }
+        catch (Exception e)
+        {
+            Log.Info(result);
+            Log.Error(e.Message);
+            return null;
+        }
     }
 
     /// <summary>
@@ -326,7 +349,7 @@ public partial class Main : CanvasLayer
         {
             if (!await OllamaApiClient.IsRunningAsync())
             {
-                throw new Exception("ollama未安装或者未启动成功");
+                throw new Exception("[ollama] 未安装或者未启动成功");
             }
         }
         catch (Exception e)
@@ -338,12 +361,12 @@ public partial class Main : CanvasLayer
         {
             if (!await OllamaApiClient.IsRunningAsync())
             {
-                throw new Exception("ollama未安装或者未启动成功");
+                throw new Exception("[ollama] 未安装或者未启动成功");
             }
         }
         catch (Exception e)
         {
-            Log.Error("ollama未安装或者未启动成功");
+            Log.Error("[ollama] 未安装或者未启动成功");
             GetTree().Quit();
         }
 
@@ -365,7 +388,8 @@ public partial class Main : CanvasLayer
             var runningModelList = await OllamaApiClient.ListRunningModelsAsync();
             foreach (var modelDto in localModelList)
             {
-                Log.Info($"{modelDto.Name} ,running: {runningModelList.Any(m => m.Name.Equals(modelDto.Name))}");
+                Log.Info(
+                    $"[ollama] 模型 {modelDto.Name} ,running: {runningModelList.Any(m => m.Name.Equals(modelDto.Name))}");
             }
         };
         Model.ItemSelected += async (index) =>
@@ -385,7 +409,7 @@ public partial class Main : CanvasLayer
             }
 
             OllamaApiClient.SelectedModel = ModelName;
-            Log.Info($"加载模型 {ModelName}");
+            Log.Info($"[ollama ]加载模型 {ModelName}");
             Model.SelfModulate = Colors.Green;
         };
 
@@ -404,7 +428,7 @@ public partial class Main : CanvasLayer
             var runningModelName = runningModelList.First().Name;
             var valueTuples = localModelList.Index().Where((im, i) => im.Item.Name.Equals(runningModelName))
                 .GetEnumerator();
-            Log.Info($"默认运行{runningModelName} - {valueTuples.Current.Index}");
+            Log.Info($"[ollama] 默认运行{runningModelName} - {valueTuples.Current.Index}");
             Model.SelectAndEmitSignal(valueTuples.Current.Index);
         }
         else

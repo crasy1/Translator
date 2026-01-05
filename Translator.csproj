@@ -10,4 +10,7 @@
     <PackageReference Include="NJsonSchema" Version="11.5.2" />
     <PackageReference Include="OllamaSharp" Version="5.4.12" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="translation.svg" />
+  </ItemGroup>
 </Project>
